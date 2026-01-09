@@ -437,7 +437,7 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 			invisible:               false,
 			spinnerChangeInterval:   100 * time.Millisecond,
 			showTotalBytes:          true,
-			showPercentDecimalCount: 2,
+			showPercentDecimalCount: 0,
 		},
 	}
 
@@ -577,6 +577,7 @@ func Default(max int64, description ...string) *ProgressBar {
 		OptionSpinnerType(14),
 		OptionFullWidth(),
 		OptionSetRenderBlankState(true),
+		OptionShowPercentDecimalCount(0),
 	)
 }
 
