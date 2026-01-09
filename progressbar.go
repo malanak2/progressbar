@@ -42,8 +42,8 @@ type State struct {
 
 type state struct {
 	currentNum        int64
-	currentPercent    int
-	lastPercent       int
+	currentPercent    float64
+	lastPercent       float64
 	currentSaucerSize int
 	isAltSaucerHead   bool
 
@@ -138,6 +138,9 @@ type config struct {
 
 	// showDescriptionAtLineEnd specifies whether description should be written at line end instead of line start
 	showDescriptionAtLineEnd bool
+
+	// showPercentDecimalCount specifies how many decimal places of the percent are to be shown
+	showPercentDecimalCount uint
 
 	// specifies how many rows of details to show,default value is 0 and no details will be shown
 	maxDetailRow int
@@ -401,6 +404,13 @@ func OptionSetMaxDetailRow(row int) Option {
 	}
 }
 
+// OptionShowPercentDecimalCount sets how many decimal places of the percent are to be shown
+func OptionShowPercentDecimalCount(count uint) Option {
+	return func(p *ProgressBar) {
+		p.config.showPercentDecimalCount = count
+	}
+}
+
 // NewOptions constructs a new instance of ProgressBar, with any options you specify
 func NewOptions(max int, options ...Option) *ProgressBar {
 	return NewOptions64(int64(max), options...)
@@ -415,18 +425,19 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 			counterTime: time.Time{},
 		},
 		config: config{
-			writer:                os.Stdout,
-			theme:                 ThemeDefault,
-			iterationString:       "it",
-			width:                 40,
-			max:                   max,
-			throttleDuration:      0 * time.Nanosecond,
-			elapsedTime:           max == -1,
-			predictTime:           true,
-			spinnerType:           9,
-			invisible:             false,
-			spinnerChangeInterval: 100 * time.Millisecond,
-			showTotalBytes:        true,
+			writer:                  os.Stdout,
+			theme:                   ThemeDefault,
+			iterationString:         "it",
+			width:                   40,
+			max:                     max,
+			throttleDuration:        0 * time.Nanosecond,
+			elapsedTime:             max == -1,
+			predictTime:             true,
+			spinnerType:             9,
+			invisible:               false,
+			spinnerChangeInterval:   100 * time.Millisecond,
+			showTotalBytes:          true,
+			showPercentDecimalCount: 2,
 		},
 	}
 
@@ -440,6 +451,10 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 
 	if b.config.maxDetailRow < 0 {
 		panic("invalid max detail row, must be greater than 0")
+	}
+
+	if b.config.showPercentDecimalCount > 2 {
+		panic("show percent decimal count too large, must not be larger than 2")
 	}
 
 	// ignoreLength if max bytes not known
@@ -724,7 +739,17 @@ func (p *ProgressBar) Add64(num int64) error {
 
 	percent := float64(p.state.currentNum) / float64(p.config.max)
 	p.state.currentSaucerSize = int(percent * float64(p.config.width))
-	p.state.currentPercent = int(percent * 100)
+	if p.config.showPercentDecimalCount > 0 {
+		// While it would be possible to only print it to a precision, it would print every time this changed,
+		// even if the displayed value was accurate.
+		// For example with a precision of 1, the percent changes form 0.1 to 0.12, it will still print 0.1,
+		// but the variable updateBar would be true
+		ratio := math.Pow(10, float64(p.config.showPercentDecimalCount))
+		p.state.currentPercent = math.Round(ratio*float64(percent*100)) / ratio
+	} else {
+		p.state.currentPercent = float64(int(percent * 100))
+	}
+
 	updateBar := p.state.currentPercent != p.state.lastPercent && p.state.currentPercent > 0
 
 	p.state.lastPercent = p.state.currentPercent
@@ -1322,7 +1347,8 @@ func renderProgressBar(c config, s *state) (int, error) {
 			}
 		}
 	} else if rightBrac == "" {
-		str = fmt.Sprintf("%4d%% %s%s%s%s%s %s",
+		str = fmt.Sprintf("%4.*f%% %s%s%s%s%s %s",
+			c.showPercentDecimalCount,
 			s.currentPercent,
 			barStart,
 			saucer,
@@ -1341,7 +1367,8 @@ func renderProgressBar(c config, s *state) (int, error) {
 		}
 	} else {
 		if s.currentPercent == 100 {
-			str = fmt.Sprintf("%4d%% %s%s%s%s%s %s",
+			str = fmt.Sprintf("%4.*f%% %s%s%s%s%s %s",
+				c.showPercentDecimalCount,
 				s.currentPercent,
 				barStart,
 				saucer,
@@ -1360,7 +1387,8 @@ func renderProgressBar(c config, s *state) (int, error) {
 				str = fmt.Sprintf("\r%s%s", c.description, str)
 			}
 		} else {
-			str = fmt.Sprintf("%4d%% %s%s%s%s%s %s [%s:%s]",
+			str = fmt.Sprintf("%4.*f%% %s%s%s%s%s %s [%s:%s]",
+				c.showPercentDecimalCount,
 				s.currentPercent,
 				barStart,
 				saucer,
